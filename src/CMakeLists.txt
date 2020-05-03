@@ -7,5 +7,5 @@ find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 link_directories(${OpenCV_LIBRARY_DIRS})
 
-add_executable (main main.cpp)
+add_executable (main main.cpp io_image.h seg_image.cpp seg_image.h)
 target_link_libraries (main ${OpenCV_LIBS} stdc++fs)
