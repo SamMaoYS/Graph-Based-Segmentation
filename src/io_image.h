@@ -58,25 +58,6 @@ namespace io {
         return !file_paths.empty();
     }
 
-    cv::Mat loadImage(const string &dir, const int flag) {
-        fs::path path(dir);
-        cv::Mat image;
-
-        if (path.extension() == "") {
-            cout
-                    << "Input directory is to a folder, maybe you want to use loadMultiImages to load multiple images from a folder"
-                    << endl;
-        } else {
-            image = cv::imread(dir, flag);
-            if (!image.data) {
-                fs::path path(dir);
-                cerr << "Could not load image " << path.filename().string() << endl;
-            }
-        }
-
-        return image;
-    }
-
     vector <cv::Mat> loadMultiImages(const string &dir, const int flag, const vector <string> &suffixes = {}) {
         vector <string> file_paths;
         vector <cv::Mat> images;
@@ -91,13 +72,38 @@ namespace io {
                 }
                 images.push_back(image);
             }
-        } else if (status == 0) {
-            cout << "Could not find file with the specific suffixes" << endl;
-        } else {
-            cout << "The directory doesn't exist" << endl;
+        }
+        else if (status == 0) {
+            cerr << "Could not find file with the specific suffixes" << endl;
+        }
+        else {
+            cerr << "The directory doesn't exist" << endl;
         }
 
         return images;
+    }
+
+    cv::Mat loadImage(const string &dir, const int flag) {
+        fs::path path(dir);
+        cv::Mat image;
+
+        if (path.extension() == "") {
+            cerr << "Input directory is to a folder, maybe you want to use loadMultiImages to load multiple images from a folder" << endl;
+        }
+        else {
+            vector <cv::Mat> images;
+            vector<string> suffixes;
+            suffixes.push_back(path.extension().string());
+            images = loadMultiImages(dir, flag, suffixes);
+            if (!images.empty()) {
+                image = images[0];
+            }
+            else {
+                cerr << "Could not load image " << path.filename().string() << endl;
+            }
+        }
+
+        return image;
     }
 }
 
