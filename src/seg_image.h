@@ -94,6 +94,10 @@ protected:
 private:
     cv::Mat image_;
     cv::Mat result_;
+
+    cv::Mat saliency_;
+    cv::Mat edge_;
+
     std::vector<cv::Mat> segments_;
     Edge *graph_;
     Universe *universe_;

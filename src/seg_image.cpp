@@ -5,8 +5,17 @@
 #include "seg_image.h"
 #include <map>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/saliency.hpp>
 
 using namespace std;
+
+#ifndef rad2deg
+#define rad2deg 180.0f/M_PI
+#endif
+
+#ifndef deg2rad
+#define deg2rad M_PI/180.0f
+#endif
 
 #define THRESHOLD(size, c) (c/size)
 
@@ -43,9 +52,28 @@ void Segmentation::setParameters(const float sigma_in, const float t_in, const f
 }
 
 void Segmentation::run() {
-    filter(image_, result_);
+    cv::Mat gray, smoothed;
+    cv::cvtColor(image_, gray, cv::COLOR_BGR2GRAY);
+    filter(gray, smoothed);
 
-    int num_edges = buildGraph(result_);
+	cv::saliency::StaticSaliencyFineGrained sal_generator = cv::saliency::StaticSaliencyFineGrained();
+	sal_generator.computeSaliency(gray, saliency_);
+    saliency_.convertTo(saliency_, CV_32F);
+	cv::normalize(saliency_, saliency_, 1.0, 0.0, cv::NORM_MINMAX);
+	cv::pow(saliency_, 2, saliency_);
+//    cv::imshow("saliency", saliency_);
+//    cv::waitKey(0);
+//    cv::destroyAllWindows();
+
+    cv::Canny(gray, edge_, 100, 200);
+    cv::GaussianBlur(edge_, edge_, cv::Size(5, 5), 0);
+    edge_.convertTo(edge_, CV_32F);
+    cv::normalize(edge_, edge_, 1.0, 0.0, cv::NORM_MINMAX);
+//    cv::imshow("edge", edge_);
+//    cv::waitKey(0);
+//    cv::destroyAllWindows();
+
+    int num_edges = buildGraph(image_);
     result_ = segment(image_.cols, image_.rows, num_edges);
 }
 
@@ -57,23 +85,61 @@ void Segmentation::filter(const cv::Mat &image_in, cv::Mat &image_out) {
 }
 
 float
-Segmentation::pixelDiff(const cv::Mat &r, const cv::Mat &g, const cv::Mat &b, const int x1, const int y1, const int x2,
+Segmentation::pixelDiff(const cv::Mat &h, const cv::Mat &s, const cv::Mat &v, const int x1, const int y1, const int x2,
                         const int y2) {
-    float diff_r = r.at<float>(y1, x1) - r.at<float>(y2, x2);
-    float diff_g = g.at<float>(y1, x1) - g.at<float>(y2, x2);
-    float diff_b = b.at<float>(y1, x1) - b.at<float>(y2, x2);
+    float k_dv = 4.5f;
+    float k_ds = 0.1f;
 
-    return sqrt(diff_r * diff_r + diff_g * diff_g + diff_b * diff_b);
+    float h1 = h.at<float>(y1, x1);
+    float s1 = s.at<float>(y1, x1);
+    float v1 = v.at<float>(y1, x1);
+
+    float h2 = h.at<float>(y2, x2);
+    float s2 = s.at<float>(y2, x2);
+    float v2 = v.at<float>(y2, x2);
+
+    float delta_v = k_dv * fabs(v1 - v2);
+    float delta_h = fabs(h1 - h2);
+    float theta = 0.0f;
+
+    if (delta_h < 180)
+        theta = delta_h;
+    else
+        theta = 360 - delta_h;
+
+    float delta_s = k_ds * sqrt(s1 * s1 + s2 * s2 - 2 * s1 * s2 * cos(theta * deg2rad));
+    float delta_hsv = sqrt(delta_v * delta_v + delta_s * delta_s);
+    if (isnan(delta_hsv) || isinf(delta_hsv))
+        delta_hsv = 0.0f;
+
+    if (v1 < 0.03f)
+        delta_hsv = 0.01f;
+
+    delta_hsv /= (sqrtf(k_dv * k_dv + k_ds * k_ds));
+    delta_hsv = std::log2(1+delta_hsv);
+
+    float delta_sal = saliency_.at<float>(y1, x1) - saliency_.at<float>(y2, x2);
+    delta_sal = (delta_sal < 0)? 0.0 : delta_sal;
+    delta_sal = std::log2(1+delta_sal) * 2;
+
+    float delta_edge = edge_.at<float>(y1, x1) - edge_.at<float>(y2, x2);
+    delta_edge = (delta_edge < 0)? 0.0 : delta_edge;
+    delta_edge = std::log2(1+delta_edge) * 1;
+
+    return delta_hsv+delta_sal+delta_edge;
 }
 
 int Segmentation::buildGraph(const cv::Mat &image_in) {
-    vector<cv::Mat> bgr(3);
-    cv::split(image_in, bgr);
+    cv::Mat hsv_img;
+    cv::cvtColor(image_in, hsv_img, cv::COLOR_BGR2HSV);
+    filter(hsv_img, hsv_img);
+    vector<cv::Mat> hsv(3);
+    cv::split(hsv_img, hsv);
 
-    cv::Mat r, g, b;
-    bgr[2].convertTo(r, CV_32F);
-    bgr[1].convertTo(g, CV_32F);
-    bgr[0].convertTo(b, CV_32F);
+    cv::Mat h, s, v;
+    hsv[2].convertTo(h, CV_32F);
+    hsv[1].convertTo(s, CV_32F);
+    hsv[0].convertTo(v, CV_32F);
 
     int width = image_in.cols;
     int height = image_in.rows;
@@ -85,34 +151,34 @@ int Segmentation::buildGraph(const cv::Mat &image_in) {
             if (x < width - 1) {
                 graph_[num].a = y * width + x;
                 graph_[num].b = y * width + (x + 1);
-                graph_[num].w = pixelDiff(r, g, b, x, y, x + 1, y);
+                graph_[num].w = pixelDiff(h, s, v, x, y, x + 1, y);
                 num++;
             }
 
             if (y < height - 1) {
                 graph_[num].a = y * width + x;
                 graph_[num].b = (y + 1) * width + x;
-                graph_[num].w = pixelDiff(r, g, b, x, y, x, y + 1);
+                graph_[num].w = pixelDiff(h, s, v, x, y, x, y + 1);
                 num++;
             }
 
             if ((x < width - 1) && (y < height - 1)) {
                 graph_[num].a = y * width + x;
                 graph_[num].b = (y + 1) * width + (x + 1);
-                graph_[num].w = pixelDiff(r, g, b, x, y, x + 1, y + 1);
+                graph_[num].w = pixelDiff(h, s, v, x, y, x + 1, y + 1);
                 num++;
             }
 
             if ((x < width - 1) && (y > 0)) {
                 graph_[num].a = y * width + x;
                 graph_[num].b = (y - 1) * width + (x + 1);
-                graph_[num].w = pixelDiff(r, g, b, x, y, x + 1, y - 1);
+                graph_[num].w = pixelDiff(h, s, v, x, y, x + 1, y - 1);
                 num++;
             }
         }
     }
 
-    bgr.clear();
+    hsv.clear();
     return num;
 }
 
