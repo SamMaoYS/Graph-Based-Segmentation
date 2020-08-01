@@ -14,12 +14,13 @@ int main(int argc, char *argv[]) {
     std::vector<cv::Mat> images = io::loadMultiImages(data_dir, -1);
 
     std::vector<SegmParam> segm_params;
-    segm_params.push_back(SegmParam(1, 90, 1000));
-    segm_params.push_back(SegmParam(0.5, 200, 3000));
-    segm_params.push_back(SegmParam(0.1, 500, 3000));
-    segm_params.push_back(SegmParam(1.2, 500, 3000));
-    segm_params.push_back(SegmParam(0.2, 100, 3000));
-    segm_params.push_back(SegmParam(0.4, 100, 3000));
+    segm_params.emplace_back(SegmParam(1, 90, 1000));
+    segm_params.emplace_back(SegmParam(0.5, 200, 3000));
+    segm_params.emplace_back(SegmParam(0.1, 500, 3000));
+    segm_params.emplace_back(SegmParam(1.2, 500, 3000));
+    segm_params.emplace_back(SegmParam(0.2, 100, 3000));
+    segm_params.emplace_back(SegmParam(0.4, 100, 3000));
+
     for (int i = 0; i < images.size(); ++i) {
         cv::Mat image = images[i];
         cv::Mat result;
@@ -38,16 +39,6 @@ int main(int argc, char *argv[]) {
             cv::waitKey(0);
             cv::destroyAllWindows();
         }
-
-//        for (int j = 0; j < masks.size(); ++j) {
-//            cv::Mat mask_out;
-//            mask_out = masks[j].mul(255);
-//            cv::namedWindow("Masks", cv::WINDOW_AUTOSIZE);
-//            cv::imshow("Masks", mask_out);
-//            cv::imwrite("../../data/result/masks/seg" + std::to_string(i) + "_mask" + std::to_string(j) + ".png", mask_out);
-//            cv::waitKey(0);
-//            cv::destroyAllWindows();
-//        }
 
         image.release();
         result.release();
