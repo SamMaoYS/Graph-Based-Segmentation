@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
             std::cout << "Segment numbers " << seg->getSegmentNumber() << std::endl;
             cv::namedWindow("Display", cv::WINDOW_AUTOSIZE);
             cv::imshow("Display", result);
-            cv::imwrite("../../data/result/seg" + std::to_string(i) + ".png", result);
+            cv::imwrite("../data/result/seg" + std::to_string(i) + ".png", result);
             cv::waitKey(0);
             cv::destroyAllWindows();
         }
